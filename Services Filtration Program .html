@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Services Filtration Program | Advanced Batch Processor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(226, 232, 240, 1); }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        input:focus, select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        .animate-slide-in { animation: slideIn 0.3s ease-out forwards; }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 antialiased">
+
+    <div class="max-w-5xl mx-auto py-12 px-4 sm:px-6">
+        <header class="text-center mb-12">
+            <div class="inline-flex items-center justify-center p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-200 mb-4">
+                <i class="ph ph-funnel text-3xl text-white"></i>
+            </div>
+            <h1 class="text-4xl font-extrabold text-slate-900 tracking-tight">Services Filtration</h1>
+        </header>
+
+        <div id="toast-container" class="fixed top-6 right-6 z-50 flex flex-col gap-2"></div>
+
+        <main class="glass-panel rounded-3xl shadow-xl overflow-hidden min-h-[500px] flex flex-col">
+            <!-- Step 0: Welcome -->
+            <section id="step-0" class="p-12 text-center flex-1 flex flex-col items-center justify-center">
+                <div class="mb-8">
+                    <div class="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <i class="ph ph-user-circle-plus text-5xl text-blue-600"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold text-slate-900">Session Setup</h2>
+                    <p class="text-slate-500 mt-2">Enter your name to start tracking this batch processing session.</p>
+                </div>
+                <div class="w-full max-sm:px-4 max-w-sm space-y-4 mx-auto">
+                    <input type="text" id="userNameInput" class="w-full text-center text-lg rounded-xl border-slate-200 p-4 border transition-all" placeholder="Your full name" onkeypress="if(event.key === 'Enter') startSession()">
+                    <button onclick="startSession()" class="w-full bg-blue-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2">
+                        Get Started <i class="ph ph-arrow-right"></i>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Step 1: Upload -->
+            <section id="step-1" class="hidden p-8 flex-1 flex flex-col">
+                <div class="flex items-center justify-between mb-6">
+                    <div><h2 class="text-xl font-bold text-slate-900">Step 1: File Ingestion</h2><p class="text-sm text-slate-500">Upload raw system exports to begin filtration.</p></div>
+                    <span id="fileCountBadge" class="px-4 py-1.5 bg-blue-50 text-blue-700 text-sm font-bold rounded-full border border-blue-100">0 Files</span>
+                </div>
+                <div id="dropzone" class="border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center hover:bg-slate-50 transition-all cursor-pointer group mb-6">
+                    <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv" class="hidden">
+                    <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform"><i class="ph ph-cloud-arrow-up text-3xl text-slate-400"></i></div>
+                    <p class="text-lg font-medium text-slate-700">Drop files here or <span class="text-blue-600">click to browse</span></p>
+                </div>
+                <div id="filePreview" class="hidden flex-1 overflow-hidden flex flex-col"><h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Prepared Files</h3><div id="fileList" class="space-y-2 mb-6 max-h-[240px] overflow-y-auto custom-scrollbar pr-2"></div></div>
+                <div class="flex justify-end pt-4 border-t border-slate-100"><button id="nextToConfig" disabled class="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">Configure Filters <i class="ph ph-sliders"></i></button></div>
+            </section>
+
+            <!-- Step 2: Configuration -->
+            <section id="step-2" class="hidden p-8 flex-1 flex flex-col bg-slate-50/50">
+                <div class="flex items-center justify-between mb-8"><h2 class="text-xl font-bold text-slate-900">Step 2: Filtration Logic</h2><button onclick="backToUpload()" class="text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-1"><i class="ph ph-arrow-left"></i> Change Files</button></div>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-8">
+                    <div class="flex flex-col md:flex-row gap-4 items-center">
+                        <div class="flex-1"><h3 class="text-sm font-bold text-slate-900">Global Settings</h3><p class="text-xs text-slate-500">Apply parameters to all files at once.</p></div>
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <select id="bulkVendor" onchange="syncGlobalUI()" class="text-sm bg-slate-50 border-slate-200 rounded-lg p-2.5"><option value="">Vendor...</option><option value="Nokia">Nokia</option><option value="Huawei">Huawei</option><option value="ZTE">ZTE</option></select>
+                            <select id="bulkRing" onchange="syncGlobalUI()" class="hidden text-sm bg-slate-50 border-slate-200 rounded-lg p-2.5"><option value="">Ring...</option><option value="PO14">PO14</option><option value="PO11">PO11</option><option value="PO35">PO35</option></select>
+                            <select id="bulkType" class="hidden text-sm bg-slate-50 border-slate-200 rounded-lg p-2.5"><option value="">Type...</option><option value="WDM">WDM</option><option value="SDH">SDH</option></select>
+                            <label class="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors"><input type="checkbox" id="bulkOrig" class="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"><span class="text-sm font-medium">Add Manual Col.</span></label>
+                            <button onclick="applyBulk()" class="bg-slate-900 text-white px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-slate-800 transition-all">Apply All</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="rowContainer" class="space-y-3 mb-8 flex-1"></div>
+                <div class="pt-6 border-t border-slate-200"><button id="processBtn" class="w-full bg-green-600 text-white py-4 px-8 rounded-2xl font-bold hover:bg-green-700 transition-all shadow-lg shadow-green-100 flex items-center justify-center gap-3"><i class="ph ph-package text-2xl"></i> Start Batch Processing & Download ZIP</button></div>
+            </section>
+
+            <!-- Overlays -->
+            <div id="processing-overlay" class="hidden p-16 text-center flex-1 flex flex-col items-center justify-center">
+                <div class="w-20 h-20 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mb-6"></div>
+                <h3 class="text-2xl font-bold text-slate-900">Generating Results</h3>
+                <p class="text-slate-500 mt-2">Summarizing circuits and building workbooks...</p>
+            </div>
+
+            <div id="success-overlay" class="hidden p-16 text-center flex-1 flex flex-col items-center justify-center">
+                <div class="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mb-6"><i class="ph ph-check-circle text-6xl text-green-500"></i></div>
+                <h3 class="text-3xl font-bold text-slate-900">Processing Complete!</h3>
+                <button onclick="location.reload()" class="mt-8 px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800">Start New Session</button>
+            </div>
+        </main>
+        <footer class="mt-12 text-center text-slate-400"><p class="text-sm font-medium tracking-wide uppercase">Developed with &hearts; by <span class="text-slate-700 font-bold">Ahmed Derbala</span></p></footer>
+    </div>
+
+    <script>
+        const SITE_LIST = ["Agiba_Petrolum-1", "New-Borg-El-Arab-1", "Ras-Elhekma--MW--1", "Service-1", "Siwa-1", "WDM_Amreya-1", "WDM_Auto-1", "WDM_Badr", "WDM_El-Dabaa-1", "WDM_Green-Beach", "WDM_Hammam-1", "WDM_Karawana", "WDM_Marabilla-1", "WDM_Marakeya-1", "WDM_Marina-1-1", "WDM_Marwa", "WDM_Matrouh-1-1", "WDM_Matrouh-2-1", "WDM_Mina-1", "WDM_Montaza", "WDM_Ngiela", "WDM_OLD-BORG-ELARAB", "WDM_S.A.EL-Rahman-1", "WDM_S.Krir-1", "WDM_Salloum", "WDM_Sidi-Barany", "WDM_TechVillage-1", "WDM_Repeater-3-1", "WDM_Repeater-2-1", "Repeater1-1", "ًًWDM_Mathany", "WDM_Mashefa"];
+        const FALLBACK_COMPANIES = ['VODAFONE DATA', 'VODAFONE', 'ORANGE DATA', 'ORANGE', 'ETISALAT', 'NOL', 'TE IPCORE', 'IPCORE', 'ARMY', 'TE ICN', 'TEICN', 'TE-ICN', 'VIP', 'EGYNET', 'MERK', 'POLICE', 'MOKHABRAT', 'REYASA', 'TEDATA', 'REQABA', 'MSAN'];
+        let appState = { userName: "User", files: [], currentStep: 0 };
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const colors = { error: 'bg-red-50 text-red-800 border-red-200', success: 'bg-green-50 text-green-800 border-green-200', info: 'bg-blue-50 text-blue-800 border-blue-200' };
+            toast.className = `${colors[type]} p-4 rounded-xl border shadow-lg text-sm font-medium animate-slide-in flex items-center gap-3`;
+            toast.innerHTML = `<i class="ph ph-circle-fill opacity-20"></i> ${message}`;
+            container.appendChild(toast);
+            setTimeout(() => { toast.classList.add('opacity-0', 'translate-x-full'); setTimeout(() => toast.remove(), 300); }, 3000);
+        }
+
+        function startSession() {
+            const name = document.getElementById('userNameInput').value.trim();
+            if(!name) { showToast("Please enter your name.", 'error'); return; }
+            appState.userName = name;
+            document.getElementById('step-0').classList.add('hidden');
+            document.getElementById('step-1').classList.remove('hidden');
+        }
+
+        function backToUpload() { document.getElementById('step-2').classList.add('hidden'); document.getElementById('step-1').classList.remove('hidden'); }
+
+        const fileInput = document.getElementById('fileInput');
+        const dropzone = document.getElementById('dropzone');
+        const nextBtn = document.getElementById('nextToConfig');
+
+        dropzone.addEventListener('click', () => fileInput.click());
+        dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('bg-blue-50', 'border-blue-400'); });
+        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('bg-blue-50', 'border-blue-400'));
+        dropzone.addEventListener('drop', (e) => { e.preventDefault(); handleFiles(e.dataTransfer.files); });
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+        async function handleFiles(fileList) {
+            const files = Array.from(fileList);
+            if(files.length === 0) return;
+            appState.files = [];
+            const container = document.getElementById('fileList');
+            container.innerHTML = '';
+            document.getElementById('filePreview').classList.remove('hidden');
+            for(let i=0; i<files.length; i++) {
+                const file = files[i];
+                try {
+                    const data = await readFile(file);
+                    appState.files.push({ name: file.name, data, id: `file-${i}` });
+                    const el = document.createElement('div');
+                    el.className = "flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl shadow-sm";
+                    el.innerHTML = `<div class="flex items-center gap-3 truncate"><i class="ph ph-file-xls text-2xl text-green-600"></i><span class="text-sm font-medium text-slate-700">${file.name}</span></div><i class="ph ph-check-circle text-green-500 text-xl"></i>`;
+                    container.appendChild(el);
+                } catch(e) { showToast(`Error reading ${file.name}`, 'error'); }
+            }
+            document.getElementById('fileCountBadge').textContent = `${appState.files.length} Files`;
+            nextBtn.disabled = appState.files.length === 0;
+        }
+
+        function readFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    resolve(XLSX.utils.sheet_to_json(sheet, {header: 1}));
+                };
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        nextBtn.addEventListener('click', () => { document.getElementById('step-1').classList.add('hidden'); document.getElementById('step-2').classList.remove('hidden'); renderRows(); });
+
+        function renderRows() {
+            const container = document.getElementById('rowContainer');
+            container.innerHTML = '';
+            appState.files.forEach((file, idx) => {
+                const div = document.createElement('div');
+                div.className = "bg-white p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row gap-4 items-start md:items-center";
+                div.innerHTML = `
+                    <div class="w-full md:w-1/3 flex items-center gap-3 overflow-hidden"><span class="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 text-slate-500 font-bold flex items-center justify-center text-xs">${idx+1}</span><p class="text-sm font-semibold truncate text-slate-700" title="${file.name}">${file.name}</p></div>
+                    <div class="flex-1 w-full grid grid-cols-2 md:grid-cols-4 gap-2">
+                        <select id="v-${idx}" onchange="syncRowUI(${idx})" class="text-xs bg-slate-50 border-slate-200 rounded-lg p-2 font-medium"><option value="">Vendor...</option><option value="Nokia">Nokia</option><option value="Huawei">Huawei</option><option value="ZTE">ZTE</option></select>
+                        <select id="r-${idx}" onchange="syncRowUI(${idx})" class="hidden text-xs bg-slate-50 border-slate-200 rounded-lg p-2 font-medium"><option value="">Ring...</option><option value="PO14">PO14</option><option value="PO11">PO11</option><option value="PO35">PO35</option></select>
+                        <select id="t-${idx}" class="hidden text-xs bg-slate-50 border-slate-200 rounded-lg p-2 font-medium"><option value="">Type...</option><option value="WDM">WDM</option><option value="SDH">SDH</option></select>
+                        <label class="flex items-center gap-2 px-2 py-2 bg-slate-50 rounded-lg cursor-pointer"><input type="checkbox" id="o-${idx}" class="rounded text-blue-600 w-4 h-4"><span class="text-[10px] font-bold uppercase tracking-tight text-slate-500">Manual Col</span></label>
+                    </div>`;
+                container.appendChild(div);
+            });
+        }
+
+        window.syncRowUI = function(idx) {
+            const vendor = document.getElementById(`v-${idx}`).value;
+            const ringEl = document.getElementById(`r-${idx}`);
+            const typeEl = document.getElementById(`t-${idx}`);
+            if(vendor === 'Nokia') {
+                ringEl.classList.remove('hidden');
+                if(ringEl.value === 'PO14') typeEl.classList.remove('hidden');
+                else { typeEl.classList.add('hidden'); typeEl.value = ""; }
+            } else { ringEl.classList.add('hidden'); ringEl.value = ""; typeEl.classList.add('hidden'); typeEl.value = ""; }
+        };
+
+        window.syncGlobalUI = function() {
+            const bulkVendor = document.getElementById('bulkVendor').value;
+            const bulkRing = document.getElementById('bulkRing').value;
+            const ringEl = document.getElementById('bulkRing');
+            const typeEl = document.getElementById('bulkType');
+            if (bulkVendor === 'Nokia') { ringEl.classList.remove('hidden'); if (bulkRing === 'PO14') typeEl.classList.remove('hidden'); else { typeEl.classList.add('hidden'); typeEl.value = ""; } }
+            else { ringEl.classList.add('hidden'); ringEl.value = ""; typeEl.classList.add('hidden'); typeEl.value = ""; }
+        };
+
+        window.applyBulk = function() {
+            const bv = document.getElementById('bulkVendor').value;
+            const br = document.getElementById('bulkRing').value;
+            const bt = document.getElementById('bulkType').value;
+            const bo = document.getElementById('bulkOrig').checked;
+            appState.files.forEach((_, idx) => {
+                const v = document.getElementById(`v-${idx}`);
+                const r = document.getElementById(`r-${idx}`);
+                const t = document.getElementById(`t-${idx}`);
+                const o = document.getElementById(`o-${idx}`);
+                if(bv) v.value = bv;
+                syncRowUI(idx);
+                if(br && !r.classList.contains('hidden')) r.value = br;
+                syncRowUI(idx);
+                if(bt && !t.classList.contains('hidden')) t.value = bt;
+                o.checked = bo;
+            });
+            showToast("Bulk settings applied.", 'success');
+        };
+
+        function rowIsProcessable(row) {
+            const rowStr = row.join(' ').toLowerCase();
+            // Added LS_EE and LL_AE to processable criteria
+            return rowStr.includes('ord') || rowStr.includes('msan') || rowStr.includes('ls_ee') || rowStr.includes('ll_ae');
+        }
+
+        function extractWDMData(cellText) {
+            if (!cellText) return null;
+            const textRaw = String(cellText);
+            const textLower = textRaw.toLowerCase();
+            if (textLower.includes('cancel')) return null;
+
+            const isMSAN = textLower.includes('msan');
+            // Updated regex to include ORD, LS_EE, and LL_AE
+            const ordMatch = textLower.match(/(ord|ls_ee|ll_ae)[^\d]*(\d+)/);
+            const ordNum = ordMatch ? ordMatch[2] : "Unknown";
+
+            const parenthesesMatch = textRaw.match(/\(([^)]+)\)/);
+            let extracted = null;
+
+            if (parenthesesMatch) {
+                const content = parenthesesMatch[1];
+                const segments = content.split('_');
+                let custArr = [];
+                let circNum = null;
+
+                for (let seg of segments) {
+                    seg = seg.trim();
+                    if (!circNum && /\d/.test(seg)) circNum = seg;
+                    else if (!circNum) custArr.push(seg);
+                }
+
+                if (custArr.length > 0 && circNum) {
+                    extracted = {
+                        company: custArr.join('_').toUpperCase(),
+                        circuit: circNum.toUpperCase()
+                    };
+                }
+            }
+
+            if (isMSAN) {
+                const circuitVal = extracted ? extracted.circuit : `No Circuit Number is Available: ${textRaw}`;
+                return { company: 'MSAN', circuit: circuitVal };
+            }
+
+            if (extracted) return extracted;
+            
+            // Fallback for identified processable strings that don't match specific parentheses
+            if (textLower.includes('ipcore')) return { company: 'TE_IPCORE', circuit: ordNum === "Unknown" ? "Check Details" : ordNum };
+            
+            const cidMatch = textLower.match(/([^\(\)\s\[\]]+)_cid/);
+            if (cidMatch) return { company: cidMatch[1].toUpperCase(), circuit: `No CID available ORD:${ordNum}` };
+
+            if (textLower.match(/(te[-_]?icn)/) && textLower.match(/icn_(\d+)/)) return { company: "TE_ICN", circuit: textLower.match(/icn_(\d+)/)[1] };
+
+            // Default fallback if a match was found for IDs but no specific customer info
+            if (ordMatch) {
+                return { company: "MANUAL_REVIEW", circuit: ordNum };
+            }
+
+            return null;
+        }
+
+        function normalizeCompany(comp) {
+            const c = String(comp).toUpperCase();
+            if (c.includes('MSAN')) return 'MSAN';
+            if (c.includes('IPCORE')) return 'TE_IPCORE';
+            if (c.includes('ICN')) return 'TE_ICN';
+            if (c.includes('VODAFONE')) return 'VODAFONE';
+            if (c.includes('ORANGE')) return 'ORANGE';
+            if (c.includes('ETISALAT')) return 'ETISALAT';
+            return c;
+        }
+
+        function createWorkbookFromGroups(groups, headerRow, manualRows, origHeader) {
+            const newWb = XLSX.utils.book_new();
+            const usedNames = new Set();
+            const sortedCustomers = Object.keys(groups).sort();
+            
+            const globalSummaryAOA = [["GRAND TOTAL SUMMARY"], [], ["Customer", "Rate Type", "Total Circuits"]];
+            const globalStats = {}; 
+
+            sortedCustomers.forEach(customerName => {
+                const rows = groups[customerName];
+                globalStats[customerName] = {};
+                rows.forEach(r => {
+                    const rate = String(r[2] || 'Unknown');
+                    globalStats[customerName][rate] = (globalStats[customerName][rate] || 0) + 1;
+                });
+                Object.keys(globalStats[customerName]).sort().forEach(rate => {
+                    globalSummaryAOA.push([customerName, rate, globalStats[customerName][rate]]);
+                });
+            });
+
+            const summaryWs = XLSX.utils.aoa_to_sheet(globalSummaryAOA);
+            XLSX.utils.book_append_sheet(newWb, summaryWs, "TOTAL_SUMMARY");
+
+            sortedCustomers.forEach(customerName => {
+                const rows = groups[customerName];
+                const localAOA = [["Customer Summary"], ["Customer", "Rate Type", "Number of Circuits"], ...Object.keys(globalStats[customerName]).sort().map(rate => [customerName, rate, globalStats[customerName][rate]]), [], headerRow, ...rows];
+                const ws = XLSX.utils.aoa_to_sheet(localAOA);
+                let finalName = customerName.replace(/[:\\/?*\[\]]/g, " ").substring(0, 31);
+                let c = 1; while (usedNames.has(finalName)) finalName = `${customerName.substring(0, 25)}_${c++}`;
+                usedNames.add(finalName);
+                XLSX.utils.book_append_sheet(newWb, ws, finalName);
+            });
+
+            if (manualRows && manualRows.length > 0) {
+                const manualWs = XLSX.utils.aoa_to_sheet([origHeader, ...manualRows]);
+                XLSX.utils.book_append_sheet(newWb, manualWs, "MANUAL_CHECK_REQUIRED");
+            }
+            return newWb;
+        }
+
+        function processHuaweiLogic(data, manual) {
+            const groups = {}, manualRows = [];
+            const h = ['Customer', 'Circuit Number', 'Rate', 'Source', 'Sink', ...(manual ? ['Original Row'] : [])];
+            for (let i = 2; i < data.length; i++) {
+                const row = data[i]; if (!row) continue;
+                if (!rowIsProcessable(row)) { manualRows.push(row); continue; }
+                let p = extractWDMData(String(row[5] || ''));
+                if (p) {
+                    let c = normalizeCompany(p.company); if (shouldForceMSAN(row)) c = 'MSAN';
+                    if (!groups[c]) groups[c] = [];
+                    groups[c].push([c, p.circuit, row[11], row[6], row[8], ...(manual ? [row.join(' | ')] : [])]);
+                } else { manualRows.push(row); }
+            }
+            return createWorkbookFromGroups(groups, h, manualRows, data[1] || data[0]);
+        }
+
+        function processZTELogic(data, manual) {
+            const hRaw = data[1] || [];
+            const getCol = (n) => hRaw.findIndex(h => String(h).trim().toLowerCase() === n.toLowerCase());
+            const idx = getCol('User Label'); if (idx === -1) return null;
+            const groups = {}, manualRows = [];
+            const h = ['Customer', 'Circuit Number', 'Rate', 'Source', 'Sink', 'Protection', ...(manual ? ['Original Row'] : [])];
+            for (let i = 2; i < data.length; i++) {
+                const row = data[i]; if(!row) continue;
+                if (!rowIsProcessable(row)) { manualRows.push(row); continue; }
+                let p = extractWDMData(String(row[idx] || ''));
+                if (p) {
+                    let c = normalizeCompany(p.company); if (shouldForceMSAN(row)) c = 'MSAN';
+                    if (!groups[c]) groups[c] = [];
+                    groups[c].push([c, p.circuit, row[getCol('Rate')], row[3], row[5], row[getCol('Protection Type') || 12], ...(manual ? [row.join(' | ')] : [])]);
+                } else { manualRows.push(row); }
+            }
+            return createWorkbookFromGroups(groups, h, manualRows, hRaw);
+        }
+
+        function processNokiaLogic(data, ring, type, manual) {
+            const groups = {}, manualRows = [];
+            const h = ['Customer', 'Circuit Number', 'Rate', ...(manual ? ['Original Row'] : [])];
+            const selRing = String(ring).toLowerCase();
+
+            for (let i = 2; i < data.length; i++) {
+                const row = data[i]; if(!row) continue;
+                const rowRingVal = String(row[5] || '').toLowerCase();
+                if (!rowRingVal.includes(selRing)) continue;
+                if (rowIsProcessable(row)) {
+                    let p = extractWDMData(String(row[3] || ''));
+                    if (p) {
+                        let c = normalizeCompany(p.company); if (shouldForceMSAN(row)) c = 'MSAN';
+                        if (!groups[c]) groups[c] = [];
+                        groups[c].push([c, p.circuit, row[2], ...(manual ? [row.join(' | ')] : [])]);
+                    } else { manualRows.push(row); }
+                } else { manualRows.push(row); }
+            }
+            return createWorkbookFromGroups(groups, h, manualRows, data[1] || data[0]);
+        }
+
+        function processNokiaSDH(data, manual) {
+            const header = data[0] || [];
+            const labelIdx = header.findIndex(h => String(h).toLowerCase().includes('user label')) || 1;
+            const rateIdx = header.findIndex(h => String(h).toLowerCase().includes('service rate')) || 8;
+            
+            const groups = {}, manualRows = [];
+            const outHeader = ['Customer', 'Circuit Number', 'Rate', ...(manual ? ['Original Row'] : [])];
+            
+            for (let i = 1; i < data.length; i++) {
+                const row = data[i]; if (!row || row.length < 2) continue;
+                if (rowIsProcessable(row)) {
+                    let p = extractWDMData(String(row[labelIdx] || ''));
+                    if (p) {
+                        let c = normalizeCompany(p.company);
+                        if (!groups[c]) groups[c] = [];
+                        groups[c].push([c, p.circuit, row[rateIdx], ...(manual ? [row.join(' | ')] : [])]);
+                    } else { manualRows.push(row); }
+                } else { 
+                    manualRows.push(row); 
+                }
+            }
+            return createWorkbookFromGroups(groups, outHeader, manualRows, header);
+        }
+
+        function processNokiaWDM(data, manual) {
+            const groups = {}, manualRows = [];
+            const header = ['Customer', 'Circuit Number', 'Rate', 'Source', 'Sink', ...(manual ? ['Original Row'] : [])];
+            
+            const extractPass = (row, rI, nI, fI, sI, kI, applyFilter) => {
+                const nameVal = String(row[nI] || '').toLowerCase();
+                const siteVal = String(row[fI] || '').toLowerCase();
+                if (siteVal.includes('cancel') || nameVal.includes('cancel')) return { success: false, handled: true };
+                
+                if (applyFilter && !SITE_LIST.some(s => siteVal.includes(s.toLowerCase()))) {
+                    return { success: false, handled: false };
+                }
+
+                const p = extractWDMData(String(row[nI]));
+                if (p) {
+                    let c = normalizeCompany(p.company); if (shouldForceMSAN(row)) c = 'MSAN';
+                    if (!groups[c]) groups[c] = [];
+                    groups[c].push([c, p.circuit, row[rI], row[sI], row[kI], ...(manual ? [row.join(' | ')] : [])]);
+                    return { success: true, handled: true };
+                }
+                return { success: false, handled: false };
+            };
+
+            for (let i = 2; i < data.length; i++) {
+                const row = data[i]; if (!row) continue;
+                
+                const siteValT1 = String(row[5] || '').toLowerCase();
+                const isSiteMatchT1 = SITE_LIST.some(s => siteValT1.includes(s.toLowerCase()));
+                
+                const nameValT1 = String(row[3] || '').toLowerCase();
+                // Check processable strings in name field for T1/T2
+                const isProcessableT1 = nameValT1.includes('ord') || nameValT1.includes('msan') || nameValT1.includes('ls_ee') || nameValT1.includes('ll_ae');
+                
+                const nameValT2 = String(row[7] || '').toLowerCase();
+                const isProcessableT2 = nameValT2.includes('ord') || nameValT2.includes('msan') || nameValT2.includes('ls_ee') || nameValT2.includes('ll_ae');
+
+                if (isProcessableT1) {
+                    if (isSiteMatchT1) {
+                        let res = extractPass(row, 2, 3, 5, 5, 7, true);
+                        if (!res.success) manualRows.push(row);
+                    }
+                } else if (isSiteMatchT1) {
+                    manualRows.push(row);
+                } else if (isProcessableT2) {
+                    let res = extractPass(row, 6, 7, 7, 9, 11, false);
+                    if (!res.success) manualRows.push(row);
+                }
+            }
+            return createWorkbookFromGroups(groups, header, manualRows, data[1] || data[0]);
+        }
+
+        function shouldForceMSAN(row) { 
+            const rowStr = row.join(' ').toLowerCase();
+            return rowStr.includes('msan'); 
+        }
+
+        document.getElementById('processBtn').addEventListener('click', async () => {
+            document.getElementById('step-2').classList.add('hidden');
+            document.getElementById('processing-overlay').classList.remove('hidden');
+            setTimeout(async () => {
+                try {
+                    const zip = new JSZip();
+                    const folder = zip.folder(`${appState.userName}_Batch_${new Date().toLocaleDateString().replace(/\//g, '-')}`);
+                    let successCount = 0;
+                    for (let i = 0; i < appState.files.length; i++) {
+                        const f = appState.files[i];
+                        const v = document.getElementById(`v-${i}`).value;
+                        const r = document.getElementById(`r-${i}`).value;
+                        const t = document.getElementById(`t-${i}`).value;
+                        const m = document.getElementById(`o-${i}`).checked;
+                        if(!v) continue;
+                        let wb = null;
+                        if (v === 'Nokia') {
+                            if (r === 'PO14') {
+                                if (t === 'WDM') wb = processNokiaWDM(f.data, m);
+                                else wb = processNokiaSDH(f.data, m);
+                            } else {
+                                wb = processNokiaLogic(f.data, r, t, m);
+                            }
+                        } else if (v === 'Huawei') wb = processHuaweiLogic(f.data, m);
+                        else if (v === 'ZTE') wb = processZTELogic(f.data, m);
+                        if (wb) { folder.file(`${f.name.split('.')[0]}_Filtered.xlsx`, XLSX.write(wb, { bookType: 'xlsx', type: 'array' })); successCount++; }
+                    }
+                    if (successCount === 0) throw new Error("No circuits matched criteria.");
+                    const zipBlob = await zip.generateAsync({ type: "blob" });
+                    const a = document.createElement('a'); a.href = URL.createObjectURL(zipBlob); a.download = `${appState.userName}_Results.zip`; a.click();
+                    document.getElementById('processing-overlay').classList.add('hidden');
+                    document.getElementById('success-overlay').classList.remove('hidden');
+                } catch (e) { showToast(e.message, 'error'); document.getElementById('processing-overlay').classList.add('hidden'); document.getElementById('step-2').classList.remove('hidden'); }
+            }, 500);
+        });
+    </script>
+</body>
+</html>
